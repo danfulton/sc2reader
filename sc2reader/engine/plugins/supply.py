@@ -35,21 +35,26 @@ class PlayerSupply:
     
     def __init__(self):
         """ Create a new _Supply instance. """
-        self.data = [(0,0,0,0)] # list of tuples [(time,workers,army,capacity)]
-        self.production = [(0,{})] # 
-        self.units = [(0,{})] # 
-        self.structures = [(0,{})] # 
+        self.data = [(0,(0,0,0))] # list of tuples [(frame,(workers,army,capacity))]
+        self.production = [(0,{})] # (frame, production queue at frame)
+        self.units = [(0,{})] # (frame, units queue at frame)
+        self.structures = [(0,{})] # (frame, structures queue at frame)
         #self.supply_capped_real_seconds = 0
 
-    def add(self,event_time,workers=0,army=0,capacity=0):
-        latest_supply = self.data[-1][1:]
-        new_supply = tuple(map(lambda x,y:x+y, latest_supply,(workers,army,capacity)))
-        self.data.append( (event_time,)+new_supply )
+    @staticmethod
+    def update_record(self,record,new_frame,new_entry):
+        # if new_frame is same as last frame, replace the last entry
+        if (record[-1][0]==new_frame):
+            record.pop()
+            record.append((new_frame,new_entry))
+        # else only update if new_entry has changed since last entry
+        elif (record[-1][1]!=new_entry):
+            record.append((new_frame,new_entry))
         
-    def sync(self,frame,cursup):
+    def sync_records(self,frame,cursup):
         if not isinstance(cursup,ActivePlayerSupply):
             tb = sys.exc_info()[2]
-            errmsg = 'PlayerSupply.sync() expects argument of type ActivePlayerSupply.'
+            errmsg = 'PlayerSupply.sync_records() expects argument of type ActivePlayerSupply.'
             raise TypeError(errmsg).with_traceback(tb)
 #         print('k we got here')
         for attr in ['production','units','structures']:
@@ -65,11 +70,7 @@ class PlayerSupply:
                 key = (unit.name,unit)
                 d[key] = d.get(key,0)+1
 #             print(' finished looping over current vals')
-            if (record[-1][0]==frame):
-                record.pop()
-                record.append((frame,d))
-            elif (record[-1][1] != d):
-                record.append((frame,d))
+            self.update_record(record,frame,d)
         # loop over record to sum up supply
 
     @staticmethod
@@ -82,11 +83,19 @@ class PlayerSupply:
         
     @staticmethod
     def _seconds_to_timestr(seconds,useGameTimeStr=True):
-            s = seconds
-            if useGameTimeStr:
-                s = s/1.4
-            m = s/60.0
-            return f'{int(m)}:{int((m-int(m))*60.0):02}'
+        s = seconds
+        if useGameTimeStr:
+            s = s/1.4
+        m = s/60.0
+        return f'{int(m)}:{int((m-int(m))*60.0):02}'
+            
+    @staticmethod
+    def _frames_to_seconds(frames):
+        return int(frames/16.0)
+    
+    @staticmethod
+    def _frames_to_timestr(frames,useGameTimeStr=True):
+        return self._seconds_to_timestr(frames/16.0,useGameTimeStr)
 
     def time_supply_capped(self,useGameTime=True):
         return self._seconds_to_timestr(self.supply_capped_real_seconds,useGameTime)    
@@ -184,7 +193,7 @@ class SupplyTracker(object):
                     if not acs.preproduction[f]:
                         acs.preproduction.pop(f)
                     acs.production[larva_id]=unit
-                self.supply[pid].sync(f,acs)
+                self.supply[pid].sync_records(f,acs)
             # may need to handle Terran and Protoss events here as well
         except:
             print(f'Unhandled BasicCommandEvent : {event}')
@@ -194,7 +203,7 @@ class SupplyTracker(object):
         try:
             f,unit,uid,pid,acs = self.unwrapUnitEvent(event)
             acs.production[uid]=unit
-            self.supply[pid].sync(f,acs)
+            self.supply[pid].sync_records(f,acs)
         except:
             print(f'Unhandled UnitInitEvent : {event}')
         
@@ -203,7 +212,7 @@ class SupplyTracker(object):
             f,unit,uid,pid,acs = self.unwrapUnitEvent(event)
             acs.production.pop(uid)
             acs.structures[uid] = unit
-            self.supply[pid].sync(f,acs)
+            self.supply[pid].sync_records(f,acs)
         except:
             print(f'Unhandled UnitDoneEvent : {event}')
 
@@ -216,7 +225,7 @@ class SupplyTracker(object):
                         acs.structures[uid]=unit
                     else:
                         acs.units[uid] = unit
-                    self.supply[pid].sync(f,acs)
+                    self.supply[pid].sync_records(f,acs)
         except:
             print(f'Unhandled UnitBornEvent : {event}')
             
@@ -228,7 +237,7 @@ class SupplyTracker(object):
                     acs.units.pop(uid,None)
                     acs.production.pop(uid,None)
                     acs.structures.pop(uid,None)
-                    self.supply[pid].sync(f,acs)
+                    self.supply[pid].sync_records(f,acs)
         except:
             print(f'Unhandled UnitDiedEvent : {event}')
 
@@ -237,6 +246,7 @@ class SupplyTracker(object):
             player.foo = 'bar'
             # need to do any sorting?
             player.supply = self.supply[player.pid]
+            # make up these old numbers
             player.current_food_used = dict(sorted(player.current_food_used.items()))
             player.current_food_made = dict(sorted(player.current_food_made.items()))
             #player.supply.data.sort(key=lambda x: x[0])
