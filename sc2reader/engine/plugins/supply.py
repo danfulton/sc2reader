@@ -19,10 +19,23 @@ class UnitSupply:
 
 class ActivePlayerSupply:
     def __init__(self):
-        self.preproduction = {}
+        self.preproduction = {'eggs':{},'utype':None}
         self.production = {}
         self.units = {}
         self.structures = {}
+    
+    def morph_unit(self,frame,utype):
+        for larva_id in self.preproduction['eggs'].pop(frame):
+            self.production[larva_id]=utype
+            
+    def flush(self,frame,syncf,utype=None):
+        for f in [f for f in self.preproduction['eggs'] if f<frame]:
+            self.morph_unit(f,self.preproduction['utype'])
+            syncf(f,self)
+        if utype:
+            self.morph_unit(frame,utype)
+            syncf(frame,self)
+            self.preproduction['utype']=utype
 
 class TimeSeries(list):
     def try_update(self,new_frame,new_entry):
@@ -206,6 +219,7 @@ class SupplyTracker(object):
             if event.unit.owner:
                 pid = event.unit.owner.pid
                 acs = self.active_supply[pid]
+                acs.flush(frame,self.supply[pid]._sync_records)
             else:
                 pid = None
                 acs = None
@@ -249,10 +263,16 @@ class SupplyTracker(object):
                 # spend larva from units and put egg in preprod queue
                 # where it waits for a corresponding "Morph" event
                 acs.units.pop(uid)
-                acs.preproduction.setdefault(f,[]).append(uid)
+                acs.preproduction['eggs'].setdefault(f,[]).append(uid)
             elif event.unit_type_name=="Larva":
                 # remove egg from production and add larva back to units
-                acs.production.pop(uid, None) # this shouldn't need to be none probably, diagnose
+                acs.production.pop(uid) 
+                acs.units[uid]=unit
+            elif event.unit_type_name.endswith('Cocoon'):
+                acs.units.pop(uid)
+                acs.production[uid]=unit
+            elif unit.is_army:
+                acs.production.pop(uid) 
                 acs.units[uid]=unit
             # are there more UnitTypeChangeEvents for other unit morphs (lurker,broods)?
             self.supply[pid]._sync_records(f,acs)
@@ -266,14 +286,10 @@ class SupplyTracker(object):
             if event.has_ability:
                 acs = self.active_supply[pid]
                 if event.ability.name.startswith('MorphTo'):
-                    pass # handle ravagers, lurkers, broods, banes, ovies
+                    pass # handle ravagers, lurkers, broods, banes, ovies (maybe don't need)
                 elif event.ability.name.startswith('Morph'):
                     unit = event.ability.build_unit
-                    preprod = acs.preproduction
-                    larva_id = acs.preproduction[f].pop(0)
-                    if not acs.preproduction[f]:
-                        acs.preproduction.pop(f)
-                    acs.production[larva_id]=unit
+                    acs.flush(f,self.supply[pid]._sync_records,unit)
                 self.supply[pid]._sync_records(f,acs)
             # may need to handle Terran and Protoss events here as well
         except:
