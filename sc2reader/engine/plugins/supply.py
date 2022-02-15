@@ -231,7 +231,6 @@ class SupplyTracker(object):
     def handleInitGame(self, event, replay):
         try:
             ## This dictionary contains the supply of every unit
-            self.supply_units = self.getUnitSupplyData()
             self.supply = dict()                 
             self.active_supply = dict()
 
@@ -349,61 +348,3 @@ class SupplyTracker(object):
             #player.supply.data.sort(key=lambda x: x[0])
         print('end of game!')
             
-    def getUnitSupplyData(self):
-        return {
-            ### Zerg ### For the swarm!
-            "Drone": UnitSupply(17, 1, SupplyType.WORKER),
-            "Zergling": UnitSupply(25, 0.5, 25),
-            "Baneling": UnitSupply(20, 0),
-            "Queen": UnitSupply(50, 2),
-            "Hydralisk": UnitSupply(33, 2),
-            "Roach": UnitSupply(27, 2),
-            "Infestor": UnitSupply(50, 2),
-            "Mutalisk": UnitSupply(33, 2),
-            "Corruptor": UnitSupply(40, 2),
-            "Ultralisk": UnitSupply(55, 6),
-            "Broodlord": UnitSupply(34, 2),
-            "SwarmHost": UnitSupply(40, 3),
-            "Viper": UnitSupply(40, 3),
-            "Overlord": UnitSupply(0, 8, SupplyType.CAPACITY),
-            "Hatchery": UnitSupply(100, 6, SupplyType.CAPACITY),
-            # Terran
-            "SCV": UnitSupply(17, 1, SupplyType.WORKER),
-            "Marine": UnitSupply(25, 1),
-            "Marauder": UnitSupply(30, 2),
-            "SiegeTank": UnitSupply(45, 2),
-            "Reaper": UnitSupply(45, 1),
-            "Ghost": UnitSupply(40, 2),
-            "Hellion": UnitSupply(30, 2),
-            "Thor": UnitSupply(60, 6),
-            "Viking": UnitSupply(42, 2),
-            "Medivac": UnitSupply(42, 2),
-            "Raven": UnitSupply(60, 2),
-            "Banshee": UnitSupply(60, 3),
-            "Battlecruiser": UnitSupply(90, 6),
-            "BattleHellion": UnitSupply(30, 2),
-            "WidowMine": UnitSupply(40, 2),
-            "SupplyDepot": UnitSupply(30, 8, SupplyType.CAPACITY),
-            "CommandCenter": UnitSupply(100, 15, SupplyType.CAPACITY),
-            # Protoss
-            "Probe": UnitSupply(17, 1, SupplyType.WORKER),
-            "Zealot": UnitSupply(38, 2),
-            "Stalker": UnitSupply(42, 2),
-            "Sentry": UnitSupply(42, 2),
-            "Observer": UnitSupply(30, 1),
-            "Immortal": UnitSupply(55, 4),
-            "WarpPrism": UnitSupply(50, 2),
-            "Colossus": UnitSupply(75, 6),
-            "Phoenix": UnitSupply(35, 2),
-            "VoidRay": UnitSupply(60, 4),
-            "HighTemplar": UnitSupply(55, 2),
-            "DarkTemplar": UnitSupply(55, 2),
-            "Archon": UnitSupply(12, 4),
-            "Carrier": UnitSupply(120, 6),
-            "Mothership": UnitSupply(100, 6),
-            "MothershipCore": UnitSupply(30, 2),
-            "Oracle": UnitSupply(50, 3),
-            "Tempest": UnitSupply(60, 4),
-            "Pylon": UnitSupply(25, 8, SupplyType.CAPACITY),
-            "Nexus": UnitSupply(100, 15, SupplyType.CAPACITY)
-        }
