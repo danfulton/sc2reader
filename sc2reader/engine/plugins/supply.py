@@ -1,21 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, print_function, unicode_literals, division
 
-from dataclasses import dataclass
-from collections import defaultdict
-from enum import Enum
-
-class SupplyType(Enum):
-    WORKER = 1
-    ARMY = 2
-    CAPACITY = 3
-
-@dataclass
-class UnitSupply:
-    """ Data structure to hold information about a single unit's supply."""
-    build_time: int
-    supply: float
-    supply_type: SupplyType = SupplyType.ARMY      
+from builtins import property as _property
+#from dataclasses import dataclass
+from collections import defaultdict, UserList
+from typing import NamedTuple
+import sys
 
 class ActivePlayerSupply:
     def __init__(self):
@@ -37,7 +27,7 @@ class ActivePlayerSupply:
             syncf(frame,self)
             self.preproduction['utype']=utype
 
-class TimeSeries(list):
+class TimeSeries(UserList):      
     def try_update(self,new_frame,new_entry):
         try:
             # if new_frame is same as last frame, this supersedes it, so pop last
@@ -50,135 +40,31 @@ class TimeSeries(list):
             print(f'Something went wrong in {self}.try_update().')
             raise
             
-    def at_time(self,time):
+    def gt(self,time,tunit='frame'):
+        pass
+        
+    def lt(self,time,tunit='frame'):
+        pass
+            
+    def at(self,time,tunit='frame'):
         i=-1
         for item in self:
             if time < item[0]:
                 return self[max(i,0)]
             i += 1
-
-class SupplyTuple(tuple):
-    def workers(self):
-        return self[0]
-    def army(self):
-        return self[1]
-    def supply(self):
-        return self[0]+self[1]
-    def capacity(self):
-        return self[2]
-    
-# This is just a TimeSeries object that can filter the data 
-# entry using any of the methods defined for SupplyTuple
-class SupplyTimeSeries(TimeSeries):
-    pass
-
-for fname in dir(SupplyTuple): 
-    if fname not in dir(tuple) and not fname.startswith('__'):
-        setattr(SupplyTimeSeries, 
-                fname, 
-                lambda self: TimeSeries([(f,SupplyTuple.__dict__[fname](d)) for f,d in self]))
-    
-class PlayerSupply:
-    """ Data structure to hold supply information. """
-    
-    def __init__(self):
-        """ Create a new _Supply instance. """
-        self.data = SupplyTimeSeries([(0,SupplyTuple((0,0,0)))]) # list of tuples [(frame,(workers,army,capacity))]
-        self.production = SupplyTimeSeries([(0,{})]) # (frame, production queue at frame)
-        self.units = SupplyTimeSeries([(0,{})]) # (frame, units queue at frame)
-        self.structures = SupplyTimeSeries([(0,{})]) # (frame, structures queue at frame)
-        self.unit_types = {}
-        self._supply_capacity = {
-            "Overlord":8,
-            "Hatchery":6,
-            "SupplyDepot":8,
-            "CommandCenter":15,
-            "Pylon":8,
-            "Nexus":15,
-        }
-        #self.supply_capped_real_seconds = 0
-        
-
-    def count_supply(self):
-#         print('I will count up supply from all the queues...')
-        try:
-            w = 0 # workers
-            a = 0 # army
-            c = 0 # capacity
-            for attr in ['production','units','structures']:
-                queue = self.__getattribute__(attr)[-1][1]
-                for uname,cnt in queue.items():
-                    u = self.unit_types[uname]
-                    w += cnt*u.supply*u.is_worker
-                    a += cnt*u.supply*u.is_army
-                    if (attr!='production'):
-                        c += cnt*self._supply_capacity.get(uname,0)
-                    elif (uname=='Zergling'):  # zerglings in production queue; 2 per egg
-                        a += cnt*u.supply*u.is_army
-            w = int(w)
-            a = int(a+.6)
-            c = int(min(c,200))
-            return SupplyTuple((w,a,c))
-        except:
-            print('something went wrong with count_supply')
-    
-    @staticmethod
-    def built_from_drone(unit):
-        try:
-            return unit.is_building*(unit.race=='Zerg')*(unit.name not in ['CreepTumor','NydusWorm'])
-        except:
-            tb = sys.exc_info()[2]
-            errmsg = 'PlayerSupply.built_from_drone(unit) expects argument of type ActivePlayerSupply.'
-            raise TypeError(errmsg).with_traceback(tb)
             
-    def _sync_records(self,frame,cursup):
-        if not isinstance(cursup,ActivePlayerSupply):
+    def tf(self,t_unit='frame'):
+        if t_unit=='frame':
+            return self
+        elif t_unit=='sec':
+            return self.__class__([(self._frames_to_seconds(f),d) for f,d in self])
+        elif t_unit in ['timestr','str']:
+            return self.__class__([(self._frames_to_timestr(f),d) for f,d in self])
+        else:
             tb = sys.exc_info()[2]
-            errmsg = 'PlayerSupply._sync_records() expects argument of type ActivePlayerSupply.'
-            raise TypeError(errmsg).with_traceback(tb)
-#         print('k we got here')
-        try:
-            # while zerg buildings are in production the drones evolving into buildings
-            # are still alive, but shouldn't be counted in the units queue
-#             print('calculating the drone offset...')
-            drone_offset = sum([self.built_from_drone(u) for u in cursup.production.values()])
-#             print('calculated the drone offset')
-            for attr in ['production','units','structures']:
-#                 print(f'  attr is {attr}')
-                current = cursup.__getattribute__(attr)
-                record = self.__getattribute__(attr)
-                d = {}
-#                 print(f'current is {current}')
-#                 print(current.values())
-#                 print('  goin into loop')
-                for unit in current.values():
-#                     print(f'    unit is {unit}')
-                    key = unit.name
-#                     print(f'    key is {key}')
-                    self.unit_types.setdefault(key,unit)
-                    d[key] = d.get(key,0)+1
-#                 print(f'finished tallying entries in {attr}')
-                if drone_offset and attr=='units':
-#                     print('applying drone offset...')
-#                     print(f'  dictionary   : {d}')
-#                     print(f'  drone_offset : {drone_offset}')
-                    d['Drone'] -= drone_offset
-#                     print('drone offset applied...')
-                try:
-#                     print('I will attempt to update the record now!')
-#                     print(f"record is {record}")
-#                     print(f"frame is {frame}")
-#                     print(f"dict is {d}")
-                    record.try_update(frame,d)
-                except:
-                    print('something wrong when calling try_update_record')
-#             print('Now update the main supply record...')
-            self.data.try_update(frame,self.count_supply())
-#             print('Main supply updated!')
-        except:
-            print('something has gone terribly wrong in _sync_records')
-
-
+            errmsg="t_unit should be one of ['frame','sec','str','timestr']"
+            raise ValueError(errmsg).with_traceback(tb)
+        
     @staticmethod
     def _timestr_to_seconds(timestr,useGameTimeStr=True):
         m,s = map(int,timestr.split(':'))
@@ -202,9 +88,136 @@ class PlayerSupply:
     @classmethod
     def _frames_to_timestr(cls,frames,useGameTimeStr=True):
         return cls._seconds_to_timestr(frames/16.0,useGameTimeStr)
+    
+    def _repr_pretty_(self,p,cycle):
+        if cycle:
+            p.text(f"{self.__class__.__name__}(...)")
+        else:
+            pre = f"{self.__class__.__name__}(["
+            with p.group(len(pre), pre, "])"):
+                for idx, item in enumerate(self):
+                    if idx:
+                        p.text(',')
+                        p.breakable()
+                    p.pretty(item) 
 
-#     def time_supply_capped(self,useGameTime=True):
-#         return self._seconds_to_timestr(self.supply_capped_real_seconds,useGameTime)      
+    
+class SupplyTuple(NamedTuple):
+    workers: int
+    army: int
+    capacity: int
+    
+    def __get_supply(self):
+        return self.workers+self.army
+    supply=_property(__get_supply,None,None,'Total supply.')
+    
+    def __repr__(self):
+        return tuple.__repr__(self)
+    
+docstrings = {"workers":"Supply of workers active and in production.",
+"army":"Supply of army active and in production.",
+"supply":"Supply of workers+army active and in production.",
+"capacity":"Total available supply capacity."}
+
+for key,val in docstrings.items():
+    setattr(getattr(SupplyTuple,key),"__doc__",val)
+    
+# This is just a TimeSeries object that can filter the data 
+# entry using any of the methods defined for SupplyTuple
+class SupplyTimeSeries(TimeSeries):
+    pass
+
+def funcgen(fname):
+    return lambda self: TimeSeries([(f,getattr(d,fname)) for f,d in self])
+
+for fname in dir(SupplyTuple):
+    if fname not in dir(tuple) and not fname.startswith('_'):
+        setattr(SupplyTimeSeries,
+                "__get_"+fname,
+                funcgen(fname))
+        setattr(SupplyTimeSeries,
+                fname,
+                property(getattr(SupplyTimeSeries,"__get_"+fname),
+                         None,
+                         None,
+                         getattr(getattr(SupplyTuple,fname),"__doc__")))
+    
+class PlayerSupply:
+    """ Data structure to hold supply information. """
+    
+    def __init__(self):
+        """ Create a new _Supply instance. """
+        self.data = SupplyTimeSeries([(0,SupplyTuple(0,0,0))]) 
+        self.production = TimeSeries([(0,{})]) # (frame, production queue at frame)
+        self.units = TimeSeries([(0,{})]) # (frame, units queue at frame)
+        self.structures = TimeSeries([(0,{})]) # (frame, structures queue at frame)
+        self.unit_types = {}
+        self._supply_capacity = {
+            "Overlord":8,
+            "Hatchery":6,
+            "SupplyDepot":8,
+            "CommandCenter":15,
+            "Pylon":8,
+            "Nexus":15,
+        }
+        #self.supply_capped_real_seconds = 0
+        
+
+    def count_supply(self):
+        try:
+            w = 0 # workers
+            a = 0 # army
+            c = 0 # capacity
+            for attr in ['production','units','structures']:
+                queue = self.__getattribute__(attr)[-1][1]
+                for uname,cnt in queue.items():
+                    u = self.unit_types[uname]
+                    w += cnt*u.supply*u.is_worker
+                    a += cnt*u.supply*u.is_army
+                    if (attr!='production'):
+                        c += cnt*self._supply_capacity.get(uname,0)
+                    elif (uname=='Zergling'):  # zerglings in production queue; 2 per egg
+                        a += cnt*u.supply*u.is_army
+            w = int(w)
+            a = int(a+.6)
+            c = int(min(c,200))
+            return SupplyTuple(w,a,c)
+        except:
+            print('something went wrong with count_supply')
+    
+    @staticmethod
+    def built_from_drone(unit):
+        try:
+            return unit.is_building*(unit.race=='Zerg')*(unit.name not in ['CreepTumor','NydusWorm'])
+        except:
+            tb = sys.exc_info()[2]
+            errmsg = 'PlayerSupply.built_from_drone(unit) expects argument of type ActivePlayerSupply.'
+            raise TypeError(errmsg).with_traceback(tb)
+            
+    def _sync_records(self,frame,cursup):
+        if not isinstance(cursup,ActivePlayerSupply):
+            tb = sys.exc_info()[2]
+            errmsg = 'PlayerSupply._sync_records() expects argument of type ActivePlayerSupply.'
+            raise TypeError(errmsg).with_traceback(tb)
+        try:
+            # while zerg buildings are in production the drones evolving into buildings
+            # are still alive, but shouldn't be shown in the units queue
+            drone_offset = sum([self.built_from_drone(u) for u in cursup.production.values()])
+            for attr in ['production','units','structures']:
+                current = cursup.__getattribute__(attr)
+                record = self.__getattribute__(attr)
+                d = {}
+                for unit in current.values():
+                    key = unit.name
+                    self.unit_types.setdefault(key,unit)
+                    d[key] = d.get(key,0)+1
+                if drone_offset and attr=='units':
+                    d['Drone'] -= drone_offset
+                record.try_update(frame,d)
+            self.data.try_update(frame,self.count_supply())
+        except:
+            print('Something has gone wrong in _sync_records')
+
     
     
 class SupplyTracker(object):
@@ -340,6 +353,7 @@ class SupplyTracker(object):
     def handleEndGame(self, event, replay):
         for player in replay.players:
             player.foo = 'bar'
+            #player.giant = Giant()
             # need to do any sorting?
             player.supply = self.supply[player.pid]
             # make up these old numbers
