@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, print_function, unicode_literals, division
 
+from sc2reader.log_utils import loggable
 from builtins import property as _property
 #from dataclasses import dataclass
 from collections import defaultdict, UserList
@@ -9,7 +10,7 @@ import sys
 
 class ActivePlayerSupply:
     def __init__(self):
-        self.preproduction = {'eggs':{},'utype':None}
+        self.preproduction = {'eggs':{},'morph_type':None}
         self.production = {}
         self.units = {}
         self.structures = {}
@@ -20,12 +21,12 @@ class ActivePlayerSupply:
             
     def flush(self,frame,syncf,utype=None):
         for f in [f for f in self.preproduction['eggs'] if f<frame]:
-            self.morph_unit(f,self.preproduction['utype'])
+            self.morph_unit(f,self.preproduction['morph_type'])
             syncf(f,self)
         if utype:
             self.morph_unit(frame,utype)
             syncf(frame,self)
-            self.preproduction['utype']=utype
+            self.preproduction['morph_type']=utype
 
 class TimeSeries(UserList):      
     def try_update(self,new_frame,new_entry):
@@ -47,9 +48,14 @@ class TimeSeries(UserList):
         pass
             
     def at(self,time,tunit='frame'):
+        def strfmt(item):
+            if type(item)==str:
+                return ':'.join([f"{int(n):02d}" for n in item.split(':')])
+            return item
+        
         i=-1
         for item in self:
-            if time < item[0]:
+            if strfmt(time) < strfmt(item[0]):
                 return self[max(i,0)]
             i += 1
             
@@ -219,7 +225,8 @@ class PlayerSupply:
             print('Something has gone wrong in _sync_records')
 
     
-    
+
+@loggable
 class SupplyTracker(object):
 
     name = "SupplyTracker"
@@ -271,24 +278,35 @@ class SupplyTracker(object):
     def handleUnitTypeChangeEvent(self,event,replay):
         try:
             f,unit,uid,pid,acs = self.unwrapUnitEvent(event)
-            if event.unit_type_name=="Egg":
-                # spend larva from units and put egg in preprod queue
-                # where it waits for a corresponding "Morph" event
-                acs.units.pop(uid)
-                acs.preproduction['eggs'].setdefault(f,[]).append(uid)
-            elif event.unit_type_name=="Larva":
-                # remove egg from production and add larva back to units
-                acs.production.pop(uid) 
-                acs.units[uid]=unit
-            elif event.unit_type_name.endswith('Cocoon'):
-                acs.units.pop(uid)
-                acs.production[uid]=unit
-            elif unit.is_army:
-                acs.production.pop(uid) 
-                acs.units[uid]=unit
-            # are there more UnitTypeChangeEvents for other unit morphs (lurker,broods)?
+            race=event.unit.owner.detail_data['race']
+            if race=='Zerg':
+                if event.unit_type_name=="Egg":
+                    # spend larva from units and put egg in preprod queue
+                    # where it waits for a corresponding "Morph" event
+                    acs.units.pop(uid)
+                    acs.preproduction['eggs'].setdefault(f,[]).append(uid)
+                elif event.unit_type_name=="Larva":
+                    # remove egg from production and add larva back to units
+                    acs.production.pop(uid) 
+                    acs.units[uid]=unit
+                elif event.unit_type_name.endswith('Cocoon'):
+                    acs.units.pop(uid)
+                    acs.production[uid]=unit
+                elif event.unit_type_name.endswith('Burrowed'):
+                    pass
+                elif unit.is_army:
+                    acs.production.pop(uid) 
+                    acs.units[uid]=unit
+                # are there more UnitTypeChangeEvents for other unit morphs (lurker,broods)?
+            elif race=='Terran':
+                pass
+            elif race=='Protoss':
+                pass
+            else:
+                return
             self.supply[pid]._sync_records(f,acs)
         except:
+            print(f'at frame {event.frame}...')
             print(f'Unhandled UnitTypeChangeEvent : {event}')
         
     def handleBasicCommandEvent(self, event, replay):
