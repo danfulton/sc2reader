@@ -6,11 +6,13 @@ from builtins import property as _property
 #from dataclasses import dataclass
 from collections import defaultdict, UserList
 from typing import NamedTuple
+from copy import copy
 import sys
 
 class ActivePlayerSupply:
     def __init__(self):
-        self.preproduction = {'eggs':{},'morph_type':None}
+        self.last_command = None
+        self.preproduction = {'training':{},'eggs':{},'morph_type':None}
         self.production = {}
         self.units = {}
         self.structures = {}
@@ -275,9 +277,32 @@ class SupplyTracker(object):
         except:
             print('Error in SupplyTracker handleInitGame(...)')
 
-    def handleUnitTypeChangeEvent(self,event,replay):
+    def handleCommandEvent(self, event, replay):
+        try:
+            if event.player:
+                self.active_supply[event.player.pid].last_command=event
+        except:
+            print(f"Unhandled CommandEvent {event}")
+            
+    def handleCommandManagerStateEvent(self, event, replay):
+        """
+        This means the last CommandEvent got repeated, so if we need to
+        make a copy and pass it along.
+        """
+        try:
+            if event.player:
+                acs = self.active_supply[event.player.pid]
+                if acs.last_command.name=="BasicCommandEvent":
+                    new_event = copy(acs.last_command)
+                    new_event.frame = event.frame
+                    self.handleBasicCommandEvent(new_event,replay)
+        except:
+            print(f"Unhandled CommandManagerStateEvent: {event}")
+            
+    def handleUnitTypeChangeEvent(self, event, replay):
         try:
             f,unit,uid,pid,acs = self.unwrapUnitEvent(event)
+            print()
             race=event.unit.owner.detail_data['race']
             if race=='Zerg':
                 if event.unit_type_name=="Egg":
@@ -320,6 +345,10 @@ class SupplyTracker(object):
                 elif event.ability.name.startswith('Morph'):
                     unit = event.ability.build_unit
                     acs.flush(f,self.supply[pid]._sync_records,unit)
+                elif event.ability.name.startswith('Train'):
+                    uname = event.ability.build_unit.name
+                    acs.preproduction['training'].setdefault('cc',[]).append(uname)
+                    print(acs.preproduction['training'])
                 self.supply[pid]._sync_records(f,acs)
             # may need to handle Terran and Protoss events here as well
         except:
